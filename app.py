@@ -7,6 +7,34 @@ from modules.nav import Navbar
 
 Navbar()
 
+def show_weight_sliders():
+    st.sidebar.write("What do you care about the most?")
+    
+    weight_star_char = st.sidebar.slider(
+        "Featured Character", 
+        min_value=1, max_value=10, value=6,
+        help="How much does the featured character mean to you?"
+    )
+    
+    weight_type = st.sidebar.slider(
+        "Type", 
+        min_value=1, max_value=10, value=3,
+        help="Do you care if it's a plush, keychain, pen, etc.?"
+    )
+    
+    weight_series = st.sidebar.slider(
+        "📚 Series", 
+        min_value=1, max_value=10, value=2,
+        help="Is it important that recommendations are part of the same series?"
+    )
+    
+    return {
+        'star_char': weight_star_char,
+        'type': weight_type,
+        'series': weight_series,
+        'baseline': 1
+    }
+
 @st.cache_resource
 def load_all():
     try:
@@ -107,9 +135,6 @@ def show_rating_screen(df, num_rated, has_image_url):
                 st.rerun()
 
 def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index, has_image_url):
-    """
-    Calculates and displays the top recommendations.
-    """
     st.title("Your Recommendations!")
     num_rated = len(st.session_state.user_ratings)
     st.write(f"Based on your {num_rated} ratings, you might also like these:")
@@ -129,7 +154,7 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
     for i, (_, row) in enumerate(rated_items_df.iterrows()):
         with cols[i]:
             st.image(get_image_url(row, has_image_url), caption=f"Rated: {row['Rating']} ⭐️", use_container_width=True)
-            # st.caption(row['Title']) # Optional: uncomment if titles are needed
+            st.caption(row['Title'])
 
     st.divider()
 
@@ -178,6 +203,8 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
 
 # Load data
 df, df_processed, item_id_to_index, tfidf_matrix, has_image_url = load_all()
+
+user_weights = show_weight_sliders()
 
 if df is not None:
     # Initialize session state

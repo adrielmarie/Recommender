@@ -47,8 +47,24 @@ def create_tfidf_matrix(df, weights=None):
     # Clean up any double underscores
     df[col] = df[col].str.replace(r'_+', '_', regex=True)
 
-    # Combine all processed columns into the content soup
-    df['content_soup'] = df[text_cols].apply(lambda x: ' '.join(x), axis=1)
+    # Initialize weights if without
+    if weights is None:
+        weights = {
+            'star_char': 6,
+            'type': 3,
+            'series': 2,
+            'baseline': 1
+        }
+
+    # Build the weighted content soup string by repeating the data
+    df['content_soup'] = (
+        (df['Character-centric'] + ' ') * weights.get('star_char', 6) +
+        (df['Type'] + ' ') * weights.get('type', 3) +
+        (df['Series'] + ' ') * weights.get('series', 2) +
+        (df['Characters'] + ' ') * weights.get('baseline', 1) +
+        (df['Tags'] + ' ') * weights.get('baseline', 1) +
+        (df['Collaboration'] + ' ') * weights.get('baseline', 1)
+    )
 
     # Clean up soup: remove extra spaces
     df['content_soup'] = df['content_soup'].str.replace(r'\s+', ' ', regex=True).str.strip()
