@@ -156,8 +156,6 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
             st.image(get_image_url(row, has_image_url), caption=f"Rated: {row['Rating']} ⭐️", use_container_width=True)
             st.caption(row['Title'])
 
-    st.divider()
-
     st.subheader("Top Recommended Items")
 
     with st.spinner("Finding recommendations..."):
@@ -173,6 +171,18 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
     else:
         # Merge to get image URLs and full data from the original df
         rec_df = recommendations.merge(df, on='Item #', how='left')
+
+        # Filter out for positive similarities
+        rec_df_positive = rec_df[rec_df['Similarity'] > 0]
+
+        if rec_df_positive.empty:
+            st.warning("No relevant recommendations found. Try adjusting your ratings or weights!")
+            if st.button("Start Over"):
+                st.session_state.user_ratings = {}
+                st.session_state.show_recs = False
+                st.session_state.current_item_id = None
+                st.rerun()
+            return
         
         for _, row in rec_df.iterrows():
             st.divider()
@@ -187,7 +197,7 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
 
                 # Clip the similarity score before using it in st.progress
                 safe_similarity = max(0.0, row['Similarity'])
-                st.progress(safe_similarity, text=f"Similarity: {row['Similarity']:.2f}")
+                st.progress(safe_similarity, text=f"Match: {row['Similarity']*100:.2f}%")
                 
                 # Show some extra info
                 info = f"**Type:** {row['Type_y']}  \n**Characters:** {row['Characters']}"
