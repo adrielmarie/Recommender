@@ -61,7 +61,7 @@ def run_simulation(df, df_processed, item_id_to_index, tfidf_matrix):
 
 st.title("🧪 Simulations")
 st.markdown("""
-This page runs 5 random experiments every time it's loaded. 
+This page runs 5 random experiments for the non-LLM recommender every time it's loaded. 
 Each experiment simulates a user rating 2-9 products randomly and shows the top 10 recommendations.
 """)
 st.button("Re-run Simulations")
