@@ -106,7 +106,7 @@ def show_rating_screen(df, num_rated, has_image_url):
 
     # Display the item
     st.header(item_title)
-    st.image(item_image_url, caption=item_title, use_container_width=True)
+    st.image(item_image_url, caption=item_title, width='stretch')
     
     # Create a simple description
     description = f"**Type:** {random_item['Type']}  \n"
@@ -124,7 +124,7 @@ def show_rating_screen(df, num_rated, has_image_url):
     
     for i in range(1, 6):
         with cols[i-1]:
-            if st.button(f"⭐️ {i}", key=f"rate_{item_id}_{i}", use_container_width=True):
+            if st.button(f"⭐️ {i}", key=f"rate_{item_id}_{i}", width='stretch'):
                 st.session_state.user_ratings[item_id] = i
                 st.session_state.current_item_id = None
                 
@@ -153,7 +153,7 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
 
     for i, (_, row) in enumerate(rated_items_df.iterrows()):
         with cols[i]:
-            st.image(get_image_url(row, has_image_url), caption=f"Rated: {row['Rating']} ⭐️", use_container_width=True)
+            st.image(get_image_url(row, has_image_url), caption=f"Rated: {row['Rating']} ⭐️", width='stretch')
             st.caption(row['Title'])
 
     st.subheader("Top Recommended Items")
@@ -189,7 +189,7 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
             col1, col2 = st.columns([1, 2])
             
             with col1:
-                st.image(get_image_url(row, has_image_url), use_container_width=True)
+                st.image(get_image_url(row, has_image_url), width='stretch')
             
             with col2:
                 # 'Title_y' is the title from the original dataframe
