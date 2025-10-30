@@ -6,7 +6,7 @@ import asyncio
 import httpx
 from scipy.sparse import csr_matrix
 from sklearn.metrics.pairwise import cosine_similarity
-import rec_systems
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 # Get structured JSON of user preferences from dataframe
 async def get_llm_profile(rated_items_df, api_key):
@@ -145,6 +145,53 @@ async def get_llm_profile(rated_items_df, api_key):
     # Fallback in case of unexpected exit
     return {"loves": [], "hates": []}
 
+# Doesn't have weights for items anymore
+def create_tfidf_matrix(df):
+    # Columns to use for content features
+    text_cols = ['Characters', 'Type', 'Tags', 'Series', 'Collaboration', 'Character-centric']
+    phrase_cols = ['Characters', 'Type', 'Series', 'Collaboration', 'Character-centric']
+
+    # Handle normal phrase columns
+    for col in phrase_cols:
+        df[col] = df[col].fillna('').astype(str).str.lower().str.replace(r'[\s,]+', '_', regex=True)
+        # Remove any trailing underscores that might result from ", "
+        df[col] = df[col].str.replace(r'_+', '_', regex=True).str.strip('_')
+        # Handle 'none' string from fillna/conversion
+        df[col] = df[col].replace('none', '')
+
+    # Handle tags
+    col = 'Tags'
+    df[col] = df[col].fillna('').astype(str).str.lower()
+    df[col] = df[col].apply(lambda x:
+        ' '.join([
+            # Strip whitespace, replace internal spaces with _
+            tag.strip().replace(' ', '_') for tag in x.split(',') if tag.strip()
+        ])
+    )
+    # Clean up any double underscores
+    df[col] = df[col].str.replace(r'_+', '_', regex=True)
+
+    # Build the weighted content soup string by repeating the data
+    df['content_soup'] = (
+        df['Character-centric'] + ' ' +
+        df['Type'] + ' ' +
+        df['Series'] + ' ' +
+        df['Characters'] + ' ' +
+        df['Tags'] + ' ' +
+        df['Collaboration']
+    )
+
+    # Clean up soup: remove extra spaces
+    df['content_soup'] = df['content_soup'].str.replace(r'\s+', ' ', regex=True).str.strip()
+
+    # Create a mapping from 'Item #' to its index
+    item_id_to_index = pd.Series(df.index, index=df['Item #']).to_dict()
+
+    # Compute TF-IDF feature matrix from context soup
+    tfidf = TfidfVectorizer(stop_words='english')
+    tfidf_matrix = tfidf.fit_transform(df['content_soup'])
+
+    return tfidf_matrix, tfidf, item_id_to_index
 
 # Get recs based on profile from LLM
 def get_llm_recommendations(profile_json, df, tfidf_matrix, tfidf_vectorizer, rated_item_ids, top_n=10):  
@@ -152,6 +199,24 @@ def get_llm_recommendations(profile_json, df, tfidf_matrix, tfidf_vectorizer, ra
         vocab = tfidf_vectorizer.vocabulary_
         num_features = len(vocab)
         user_profile = np.zeros(num_features)
+
+        # Failsafes for incorrect formatting
+        for preference_list in [profile_json.get("loves", []), profile_json.get("hates", [])]:
+            for item in preference_list:
+                token = item.get("token", "")
+
+                # Sometimes LLM gets the series wrong by adding "_series" to the end
+                if token.endswith("_series"):
+                    # Remove the "_series" suffix
+                    corrected_token = token[:-7] 
+                    # Check if the corrected token is in the vocab
+                    if corrected_token in vocab:
+                        item["token"] = corrected_token
+
+                # If it gets badtz-maru wrong
+                if token == "badtz_maru":
+                    if "badtz-maru" in vocab:
+                        item["token"] = "badtz-maru"
         
         # Add "loves" to the profile (Positive weights)
         for item in profile_json.get("loves", []):

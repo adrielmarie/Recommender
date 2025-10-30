@@ -3,8 +3,8 @@ st.set_page_config(layout="centered")
 
 import pandas as pd
 import asyncio
-from rec_systems import preprocess_data, create_tfidf_matrix
-from rec_llm import get_llm_profile, get_llm_recommendations
+from rec_systems import preprocess_data
+from rec_llm import get_llm_profile, create_tfidf_matrix, get_llm_recommendations
 from modules.nav import Navbar
 
 @st.cache_resource
@@ -23,7 +23,7 @@ def load_all():
 
     if df is not None:
         df_processed = preprocess_data(df.copy())
-        tfidf_matrix, tfidf_vectorizer, item_id_to_index = create_tfidf_matrix(df_processed, weights=None)
+        tfidf_matrix, tfidf_vectorizer, item_id_to_index = create_tfidf_matrix(df_processed)
         
         return df, df_processed, item_id_to_index, tfidf_matrix, tfidf_vectorizer, has_image_url
     
