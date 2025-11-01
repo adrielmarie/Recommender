@@ -44,11 +44,11 @@ def show_rating_screen(df, num_rated, has_image_url):
     st.progress(num_rated / 5, text=f"Item {num_rated + 1} of 5")
     
     # Get or set the current item to rate
-    item_id = st.session_state.get('current_item_id')
+    item_id = st.session_state.get('llm_current_item_id')
     
     # Find a new item if none or if the current one already rated
-    if not item_id or item_id in st.session_state.user_ratings:
-        rated_ids = set(st.session_state.user_ratings.keys())
+    if not item_id or item_id in st.session_state.llm_user_ratings:
+        rated_ids = set(st.session_state.llm_user_ratings.keys())
         available_items = df[~df['Item #'].isin(rated_ids)]
         
         if available_items.empty:
@@ -56,20 +56,20 @@ def show_rating_screen(df, num_rated, has_image_url):
             st.info("Click 'Show Recommendations' to see your results.")
             # Add a button to skip to recommendations
             if st.button("Show Recommendations Now"):
-                st.session_state.show_recs = True
-                st.session_state.current_item_id = None # Clear current item
+                st.session_state.llm_show_recs = True
+                st.session_state.llm_current_item_id = None # Clear current item
                 st.rerun()
             return
 
         # Get a new random item and store its ID in the session state
         random_item = available_items.sample(1).iloc[0]
         item_id = random_item['Item #']
-        st.session_state.current_item_id = item_id
+        st.session_state.llm_current_item_id = item_id
     else:
         # Get the item row from the stored item_id
         random_item_series = df[df['Item #'] == item_id]
         if random_item_series.empty:
-             st.session_state.current_item_id = None
+             st.session_state.llm_current_item_id = None
              st.rerun()
              return
         random_item = random_item_series.iloc[0]
@@ -97,12 +97,12 @@ def show_rating_screen(df, num_rated, has_image_url):
     for i in range(1, 6):
         with cols[i-1]:
             if st.button(f"⭐️ {i}", key=f"rate_{item_id}_{i}", use_container_width=True):
-                st.session_state.user_ratings[item_id] = i
-                st.session_state.current_item_id = None
+                st.session_state.llm_user_ratings[item_id] = i
+                st.session_state.llm_current_item_id = None
                 
                 # Check if we've reached 5 ratings
-                if len(st.session_state.user_ratings) >= 5:
-                    st.session_state.show_recs = True
+                if len(st.session_state.llm_user_ratings) >= 5:
+                    st.session_state.llm_show_recs = True
                 
                 st.rerun()
 
@@ -111,14 +111,14 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
     Calculates and displays recommendations using the LLM.
     """
     st.title("Your LLM Recommendations!")
-    num_rated = len(st.session_state.user_ratings)
+    num_rated = len(st.session_state.llm_user_ratings)
     st.write(f"Based on your {num_rated} ratings, you might also like these:")
 
     st.subheader("Your Rated Items")
     
-    rated_ids = list(st.session_state.user_ratings.keys())
+    rated_ids = list(st.session_state.llm_user_ratings.keys())
     rated_items_df = df[df['Item #'].isin(rated_ids)].copy()
-    rated_items_df['rating'] = rated_items_df['Item #'].apply(lambda x: st.session_state.user_ratings[x])
+    rated_items_df['rating'] = rated_items_df['Item #'].apply(lambda x: st.session_state.llm_user_ratings[x])
     
     # Display rated items side-by-side
     cols = st.columns(len(rated_items_df))
@@ -171,9 +171,9 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
         if rec_df_positive.empty:
             st.warning("No relevant recommendations found. Try adjusting your ratings!")
             if st.button("Start Over"):
-                st.session_state.user_ratings = {}
-                st.session_state.show_recs = False
-                st.session_state.current_item_id = None
+                st.session_state.llm_user_ratings = {}
+                st.session_state.llm_show_recs = False
+                st.session_state.llm_current_item_id = None
                 st.rerun()
             return
         
@@ -199,9 +199,9 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
     st.divider()
     if st.button("Start Over & Rate Again", type="primary"):
         # Clear all session state to restart
-        st.session_state.user_ratings = {}
-        st.session_state.show_recs = False
-        st.session_state.current_item_id = None
+        st.session_state.llm_user_ratings = {}
+        st.session_state.llm_show_recs = False
+        st.session_state.llm_current_item_id = None
         st.rerun()
 
 Navbar()
@@ -211,17 +211,17 @@ df, df_processed, item_id_to_index, tfidf_matrix, tfidf_vectorizer, has_image_ur
 
 if df is not None:
     # Initialize session state
-    if 'user_ratings' not in st.session_state:
-        st.session_state.user_ratings = {}
-    if 'show_recs' not in st.session_state:
-        st.session_state.show_recs = False
-    if 'current_item_id' not in st.session_state:
-        st.session_state.current_item_id = None
+    if 'llm_user_ratings' not in st.session_state:
+        st.session_state.llm_user_ratings = {}
+    if 'llm_show_recs' not in st.session_state:
+        st.session_state.llm_show_recs = False
+    if 'llm_current_item_id' not in st.session_state:
+        st.session_state.llm_current_item_id = None
 
-    num_rated = len(st.session_state.user_ratings)
+    num_rated = len(st.session_state.llm_user_ratings)
 
     # Show recommendations
-    if num_rated >= 5 or st.session_state.show_recs:
+    if num_rated >= 5 or st.session_state.llm_show_recs:
         show_recommendation_screen(
             df, df_processed, tfidf_matrix, item_id_to_index, tfidf_vectorizer, has_image_url
         )
