@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import json
-import os
+import time
 import asyncio
 import httpx
 from scipy.sparse import csr_matrix
@@ -13,62 +13,64 @@ async def get_llm_profile(rated_items_df, api_key):
     # Format user ratings into a string for the prompt
     ratings_summary = []
     for _, item in rated_items_df.iterrows():
-        ratings_summary.append(
-            f"- Rating: {item['rating']} stars\n"
-            f"  Title: {item['Title']}\n"
-            f"  Type: {item['Type']}\n"
-            f"  Main Character: {item['Character-centric']}\n"
-            f"  Tags: {item['Tags']}\n"
-        )
+        series = item['Series']
+        if series == "":
+            ratings_summary.append(
+                f"- Rating: {item['rating']} stars\n"
+                f"  Tags: {item['Character-centric']} {item['Tags']}\n"
+            )
+        else:
+            ratings_summary.append(
+                f"- Rating: {item['rating']} stars"
+                f" | Tags: {item['Character-centric']} {item['Series']} {item['Tags']}\n"
+            )
     ratings_text = "\n".join(ratings_summary)
+    print("Ratings text: ", ratings_text)
 
     # Define the system prompt and query
     system_prompt = """
     You are an expert recommender system analyst. Your job is to analyze a user's item
     ratings and return a structured JSON object of their preferences.
 
-    The user provides ratings (1-5 stars) for Sanrio products.
-    - 5 stars = loves
-    - 1 star = hates
+    The user provides ratings (1-5 stars) and some attributes about the product.
+    - 4-5 stars = loves
+    - 1-2 stars = hates
     
     You must identify the key features (characters, types, series, tags) and
     assign weights based on the user's ratings.
-    
-    Tokenization Rules:
-    1.  All tokens must be lowercase.
-    2.  Replace all spaces and commas with a single underscore (e.g., 'Hello Kitty' -> 'hello_kitty'). The exception is badtz-maru, dash (-) not underscore (_).
-    3.  For the 'Series' column: Tokenize the series name *exactly* as it appears (lowercased, with underscores). 
-        **Do NOT append the word '_series' to the token.** (e.g., 'I Love Me' -> 'i_love_me', NOT 'i_love_me_series').
-    4.  For 'Tags': Tokenize each individual tag. (e.g., "7'' plush" -> "7''_plush").
 
-    Weighting Rules:
-    - 'main_focus_character' (from 'Character-centric' column): weight 6.0
-    - 'type' (from 'Type' column): weight 3.0
-    - 'series' (from 'Series' column): weight 2.0
-    - 'character' (from 'Characters' column): weight 1.0
-    - all other 'tags': weight 1.0
+    Token weights should be:
+    - 6 for high-priority tokens (e.g., a specific character in a 5-star rating)
+    - 3 for medium-priority tokens (e.g., a product type in a 5-star rating)
+    - 2 for high-priority negative tokens (e.g., a specific character in a 1-star rating)
+    - 1 for all other tokens.
       
-    Return ONLY a valid JSON object in the following format:
-    {
-      "loves": [
-        {"token": "token_name", "weight": 6.0},
-        {"token": "other_token", "weight": 1.0}
-      ],
-      "hates": [
-        {"token": "hated_token", "weight": 6.0}
-      ]
-    }
+    The input format is:
+    - Rating: [1-5] stars | Tags: [tag1, tag2, tag3, ...]
+
+    RULES:
+    1.  Analyze the 'Tags' field for preferences.
+    2.  "Loves" (4-5 stars) go in the "loves" array.
+    3.  "Hates" (1-2 stars) go in the "hates" array.
+    4.  Ignore 3-star ratings.
+    5.  The JSON MUST follow this schema:
+        {
+          "loves": [{"token": "string", "weight": int}, ...],
+          "hates": [{"token": "string", "weight": int}, ...]
+        }
+    6.  Do not include 3-star ratings in the output.
+    7.  If there are no loves or hates, return an empty array for that key.
     """
     
     user_query = f"""
     Here are the user's ratings:
+
     {ratings_text}
 
-    Analyze these ratings and provide the structured JSON output.
-    Remember to tokenize keywords (e.g., 'Hello Kitty' -> 'hello_kitty', '7'' plush' -> '7''_plush').
+    Return the structured JSON object.
     """
 
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key={api_key}"
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={api_key}"
 
     payload = {
         "contents": [{"parts": [{"text": user_query}]}],
@@ -114,11 +116,15 @@ async def get_llm_profile(rated_items_df, api_key):
     async with httpx.AsyncClient(timeout=60.0) as client:
         for attempt in range(max_retries):
             try:
+                start_time = time.time()
                 response = await client.post(
                     api_url,
                     headers={'Content-Type': 'application/json'},
                     json=payload
                 )
+                end_time = time.time()
+
+                duration = end_time - start_time
                 
                 response.raise_for_status()
                 
@@ -129,7 +135,7 @@ async def get_llm_profile(rated_items_df, api_key):
                     raise ValueError("API returned empty response.")
                 
                 print(f"LLM JSON Response:\n{json_text}")
-                return json.loads(json_text)
+                return json.loads(json_text), duration
 
             except (httpx.RequestError, httpx.HTTPStatusError, json.JSONDecodeError, ValueError, IndexError, KeyError) as e:
                 print(f"Error calling LLM (Attempt {attempt + 1}/{max_retries}): {e}")

@@ -5,6 +5,7 @@ import random
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.sparse import csr_matrix
+import time
 
 # Load the data
 def load_data(dataset):
@@ -96,6 +97,10 @@ def create_tfidf_matrix(df, weights=None):
     return tfidf_matrix, tfidf, item_id_to_index
 
 def get_recommendations(user_ratings, df, tfidf_matrix, item_id_to_index, top_n=10):
+
+    # Start timer for getting recommendations
+    start_time = time.time()
+
     # Create an empty user profile vector
     user_profile = np.zeros(tfidf_matrix.shape[1])
 
@@ -122,8 +127,10 @@ def get_recommendations(user_ratings, df, tfidf_matrix, item_id_to_index, top_n=
 
     # If no valid ratings (all neutral or no items found), return empty
     if not valid_ratings_found:
+        end_time = time.time()
+        duration = end_time - start_time
         print("No recommendations to generate. Please provide non-neutral ratings (1, 2, 4, or 5).")
-        return pd.DataFrame(columns=['Item #', 'Title', 'Type', 'Character-centric' 'Similarity'])
+        return pd.DataFrame(columns=['Item #', 'Title', 'Type', 'Character-centric' 'Similarity']), duration
 
     # Reshape profile to 2D array for cosine_similarity function
     user_profile_sparse = csr_matrix(user_profile)
@@ -149,7 +156,11 @@ def get_recommendations(user_ratings, df, tfidf_matrix, item_id_to_index, top_n=
     # Sort by similarity to get the top recommendations
     df_recommendations = df_recommendations.sort_values(by='Similarity', ascending=False)
 
-    return df_recommendations.head(top_n)
+    # End timer
+    end_time = time.time()
+    duration = end_time - start_time
+
+    return df_recommendations.head(top_n), duration
 
 def generate_random_ratings(df, num_products):
     random_item_indices = random.sample(range(len(df)), num_products)

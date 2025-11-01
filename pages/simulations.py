@@ -6,6 +6,8 @@ import rec_systems as recommender
 import random
 from modules.nav import Navbar
 
+PRODUCT_COUNTS = [3, 5, 10, 15, 20]
+
 @st.cache_resource
 def load_all():
     try:
@@ -25,10 +27,7 @@ def load_all():
     
     return None, None, None, None
 
-def run_simulation(df, df_processed, item_id_to_index, tfidf_matrix):
-    # Pick a random number of products to rate (2-9)
-    num_to_rate = random.randint(2, 9)
-    
+def run_simulation(df, df_processed, item_id_to_index, tfidf_matrix, num_to_rate):
     # Get random ratings
     random_item_indices = random.sample(range(len(df)), num_to_rate)
     random_items = df.iloc[random_item_indices]
@@ -47,9 +46,8 @@ def run_simulation(df, df_processed, item_id_to_index, tfidf_matrix):
             "Character-centric": row['Character-centric'],
             "Rating": rating
         })
-        
-    # Get recommendations
-    recommendations = recommender.get_recommendations(
+    
+    recommendations, duration = recommender.get_recommendations(
         user_ratings,
         df_processed,
         tfidf_matrix,
@@ -57,14 +55,13 @@ def run_simulation(df, df_processed, item_id_to_index, tfidf_matrix):
         top_n=10
     )
     
-    return rated_items_details, recommendations
+    return rated_items_details, recommendations, duration
 
 st.title("🧪 Simulations")
-st.markdown("""
-This page runs 5 random experiments for the non-LLM recommender every time it's loaded. 
-Each experiment simulates a user rating 2-9 products randomly and shows the top 10 recommendations.
+st.markdown(f"""
+This page runs **{len(PRODUCT_COUNTS)}** random experiments for the non-LLM recommender every time it's loaded. 
+Each experiment simulates a user rating **{PRODUCT_COUNTS}** randomly and shows the top 10 recommendations.
 """)
-st.button("Re-run Simulations")
 
 Navbar()
 
@@ -75,31 +72,33 @@ if df is None:
     st.error("Simulation could not run. Check data file 'sanrio_products.csv'.")
 else:
     # Run five experiments
-    for i in range(1, 6):
-        st.divider()
-        st.header(f"User #{i}")
-        
-        rated_items, recommendations = run_simulation(df, df_processed, item_id_to_index, tfidf_matrix)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader(f"Simulated Ratings ({len(rated_items)} items)")
+    if st.button("Run Progressive Simulations", type="primary"):
+        for i, count in enumerate(PRODUCT_COUNTS):
+            st.divider()
+            st.header(f"Experiment {i+1}: {count} Products Rated")
             
-            rated_df = pd.DataFrame(rated_items).set_index('Item #')
-            # Rename column for display
-            rated_df.rename(columns={'Character-centric': 'Featured Character'}, inplace=True)
+            rated_items, recommendations, duration = run_simulation(df, df_processed, item_id_to_index, tfidf_matrix, count)
             
-            st.dataframe(rated_df, use_container_width=True)
-            
-        with col2:
-            st.subheader("Top 10 Recommendations")
-            if recommendations.empty:
-                st.info("No recommendations were generated for this simulation (e.g., all ratings were neutral).")
-            else:
-                # Display recommendations
-                rec_display = recommendations[['Item #', 'Title', 'Type', 'Character-centric', 'Similarity']].copy()
-                # Rename column for display
-                rec_display.rename(columns={'Character-centric': 'Featured Character'}, inplace=True)
+            col1, col2 = st.columns(2)
+        
+            with col1:
+                st.subheader(f"Simulated Ratings ({len(rated_items)} items)")
                 
-                st.dataframe(rec_display.set_index('Item #'), use_container_width=True)
+                rated_df = pd.DataFrame(rated_items).set_index('Item #').sort_values(by='Rating', ascending=False)
+                # Rename column for display
+                rated_df.rename(columns={'Character-centric': 'Featured Character'}, inplace=True)
+                
+                st.dataframe(rated_df, use_container_width=True)
+                
+            with col2:
+                st.subheader("Top 10 Recommendations")
+                st.metric(label="Calculation Duration", value=f"{duration:.4f} seconds")
+                if recommendations.empty:
+                    st.info("No recommendations were generated for this simulation (e.g., all ratings were neutral).")
+                else:
+                    # Display recommendations
+                    rec_display = recommendations[['Item #', 'Title', 'Type', 'Character-centric', 'Similarity']].copy()
+                    # Rename column for display
+                    rec_display.rename(columns={'Character-centric': 'Featured Character'}, inplace=True)
+                    
+                    st.dataframe(rec_display.set_index('Item #'), use_container_width=True)

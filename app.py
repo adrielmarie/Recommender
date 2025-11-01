@@ -158,7 +158,7 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
     st.subheader("Top Recommended Items")
 
     with st.spinner("Finding recommendations..."):
-        recommendations = recommender.get_recommendations(
+        recommendations, duration = recommender.get_recommendations(
             st.session_state.user_ratings,
             df_processed,
             tfidf_matrix,

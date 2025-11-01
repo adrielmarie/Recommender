@@ -58,6 +58,8 @@ def show_rating_screen(df, num_rated, has_image_url):
             if st.button("Show Recommendations Now"):
                 st.session_state.llm_show_recs = True
                 st.session_state.llm_current_item_id = None # Clear current item
+                st.session_state.llm_profile_cache = None
+                st.session_state.llm_recs_cache = None
                 st.rerun()
             return
 
@@ -117,7 +119,7 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
     st.subheader("Your Rated Items")
     
     rated_ids = list(st.session_state.llm_user_ratings.keys())
-    rated_items_df = df[df['Item #'].isin(rated_ids)].copy()
+    rated_items_df = df_processed[df_processed['Item #'].isin(rated_ids)].copy()
     rated_items_df['rating'] = rated_items_df['Item #'].apply(lambda x: st.session_state.llm_user_ratings[x])
     
     # Display rated items side-by-side
@@ -127,29 +129,37 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
             st.image(get_image_url(row, has_image_url), caption=f"Rated: {row['rating']} ⭐️", width='stretch')
             st.caption(row['Title'])
     
-    # Get API Key
-    api_key = st.secrets["GEMINI_API_KEY"]
-    
     # Create profile with LLM
-    with st.spinner("Analyzing your ratings with Gemini..."):
-        try:
-            llm_profile = asyncio.run(get_llm_profile(rated_items_df, api_key))
-        except Exception as e:
-            st.error(f"Error calling LLM: {e}")
-            if st.button("Try again"):
-                 st.rerun()
-            return
-    
-    # Calculate recommendations from profile
-    with st.spinner("Calculating your personalized recommendations..."):
-        recommendations = get_llm_recommendations(
-            llm_profile,
-            df_processed,
-            tfidf_matrix,
-            tfidf_vectorizer,
-            rated_ids,
-            top_n=10
-        )
+    if st.session_state.llm_recs_cache is None:
+        # Get API Key
+        api_key = st.secrets["GEMINI_API_KEY"]
+
+        with st.spinner("Analyzing your ratings with Gemini..."):
+            try:
+                llm_profile, duration = asyncio.run(get_llm_profile(rated_items_df, api_key))
+            except Exception as e:
+                st.error(f"Error calling LLM: {e}")
+                if st.button("Try again"):
+                    st.rerun()
+                return
+        
+        # Calculate recommendations from profile
+        with st.spinner("Calculating your personalized recommendations..."):
+            recommendations = get_llm_recommendations(
+                llm_profile,
+                df_processed,
+                tfidf_matrix,
+                tfidf_vectorizer,
+                rated_ids,
+                top_n=10
+            )
+
+        # Save results
+        st.session_state.llm_profile_cache = llm_profile
+        st.session_state.llm_recs_cache = recommendations
+
+    llm_profile = st.session_state.llm_profile_cache
+    recommendations = st.session_state.llm_recs_cache
         
     # Display LLM's analysis
     st.subheader("AI Analysis of Your Profile:")
@@ -174,6 +184,8 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
                 st.session_state.llm_user_ratings = {}
                 st.session_state.llm_show_recs = False
                 st.session_state.llm_current_item_id = None
+                st.session_state.llm_profile_cache = None
+                st.session_state.llm_recs_cache = None
                 st.rerun()
             return
         
@@ -202,6 +214,8 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
         st.session_state.llm_user_ratings = {}
         st.session_state.llm_show_recs = False
         st.session_state.llm_current_item_id = None
+        st.session_state.llm_profile_cache = None
+        st.session_state.llm_recs_cache = None
         st.rerun()
 
 Navbar()
@@ -217,6 +231,10 @@ if df is not None:
         st.session_state.llm_show_recs = False
     if 'llm_current_item_id' not in st.session_state:
         st.session_state.llm_current_item_id = None
+    if 'llm_profile_cache' not in st.session_state:
+        st.session_state.llm_profile_cache = None
+    if 'llm_recs_cache' not in st.session_state:
+        st.session_state.llm_recs_cache = None
 
     num_rated = len(st.session_state.llm_user_ratings)
 
