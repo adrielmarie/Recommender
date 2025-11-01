@@ -148,8 +148,7 @@ async def get_llm_profile(rated_items_df, api_key):
 # Doesn't have weights for items anymore
 def create_tfidf_matrix(df):
     # Columns to use for content features
-    text_cols = ['Characters', 'Type', 'Tags', 'Series', 'Collaboration', 'Character-centric']
-    phrase_cols = ['Characters', 'Type', 'Series', 'Collaboration', 'Character-centric']
+    phrase_cols = ['Type', 'Series', 'Collaboration', 'Character-centric']
 
     # Handle normal phrase columns
     for col in phrase_cols:
@@ -159,15 +158,33 @@ def create_tfidf_matrix(df):
         # Handle 'none' string from fillna/conversion
         df[col] = df[col].replace('none', '')
 
+    # Processing columns set up as lists
+    def process_list_column(tag_string):
+        if not isinstance(tag_string, str):
+            return ""
+        
+        tags = tag_string.split(',')
+        processed_tags = []
+        for tag in tags:
+            clean_tag = tag.strip()
+            if clean_tag:
+                # Replace internal spaces with underscores
+                tokenized_tag = clean_tag.replace(' ', '_')
+                processed_tags.append(tokenized_tag)
+        
+        # Join processed tags with a space
+        return ' '.join(processed_tags)
+
     # Handle tags
-    col = 'Tags'
-    df[col] = df[col].fillna('').astype(str).str.lower()
-    df[col] = df[col].apply(lambda x:
-        ' '.join([
-            # Strip whitespace, replace internal spaces with _
-            tag.strip().replace(' ', '_') for tag in x.split(',') if tag.strip()
-        ])
-    )
+    list_cols = ['Characters', 'Tags']
+    for col in list_cols:
+        if col in df.columns:
+            # Ensure it's a string, lowercase
+            df[col] = df[col].fillna('').astype(str).str.lower()
+            df[col] = df[col].apply(process_list_column)
+            # Clean up any double underscores
+            df[col] = df[col].str.replace(r'_+', '_', regex=True)
+
     # Clean up any double underscores
     df[col] = df[col].str.replace(r'_+', '_', regex=True)
 
@@ -188,7 +205,7 @@ def create_tfidf_matrix(df):
     item_id_to_index = pd.Series(df.index, index=df['Item #']).to_dict()
 
     # Compute TF-IDF feature matrix from context soup
-    tfidf = TfidfVectorizer(stop_words='english')
+    tfidf = TfidfVectorizer(stop_words='english', token_pattern=r'\S+')
     tfidf_matrix = tfidf.fit_transform(df['content_soup'])
 
     return tfidf_matrix, tfidf, item_id_to_index
