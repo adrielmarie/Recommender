@@ -15,19 +15,19 @@ def load_all():
         df['Item #'] = df['Item #'].astype(str)
     except FileNotFoundError:
         st.error("Error: 'sanrio_products.csv' not found. Make sure it's in the root directory.")
-        return None, None, None, None
+        return None, None, None, None, None
     except Exception as e:
         st.error(f"Error loading data: {e}")
-        return None, None, None, None
+        return None, None, None, None, None
 
     if df is not None:
         df_processed = recommender.preprocess_data(df.copy())
-        tfidf_matrix, _, item_id_to_index = recommender.create_tfidf_matrix(df_processed)
-        return df, df_processed, item_id_to_index, tfidf_matrix
+        tfidf_matrix, tfidf_vectorizer, item_id_to_index = recommender.create_tfidf_matrix(df_processed)
+        return df, df_processed, item_id_to_index, tfidf_matrix, tfidf_vectorizer
     
-    return None, None, None, None
+    return None, None, None, None, None
 
-def run_simulation(df, df_processed, item_id_to_index, tfidf_matrix, num_to_rate):
+def run_simulation(df, df_processed, item_id_to_index, tfidf_matrix, tfidf_vectorizer, num_to_rate):
     # Get random ratings
     random_item_indices = random.sample(range(len(df)), num_to_rate)
     random_items = df.iloc[random_item_indices]
@@ -47,15 +47,16 @@ def run_simulation(df, df_processed, item_id_to_index, tfidf_matrix, num_to_rate
             "Rating": rating
         })
     
-    recommendations, duration = recommender.get_recommendations(
+    recommendations, user_profile, duration = recommender.get_recommendations(
         user_ratings,
         df_processed,
         tfidf_matrix,
+        tfidf_vectorizer,
         item_id_to_index,
         top_n=10
     )
     
-    return rated_items_details, recommendations, duration
+    return rated_items_details, recommendations, user_profile, duration
 
 st.title("🧪 Simulations")
 st.markdown(f"""
@@ -66,7 +67,7 @@ Each experiment simulates a user rating **{PRODUCT_COUNTS}** randomly and shows 
 Navbar()
 
 # Load all data
-df, df_processed, item_id_to_index, tfidf_matrix = load_all()
+df, df_processed, item_id_to_index, tfidf_matrix, tfidf_vectorizer = load_all()
 
 if df is None:
     st.error("Simulation could not run. Check data file 'sanrio_products.csv'.")
@@ -77,7 +78,7 @@ else:
             st.divider()
             st.header(f"Experiment {i+1}: {count} Products Rated")
             
-            rated_items, recommendations, duration = run_simulation(df, df_processed, item_id_to_index, tfidf_matrix, count)
+            rated_items, recommendations, user_profile, duration = run_simulation(df, df_processed, item_id_to_index, tfidf_matrix, tfidf_vectorizer, count)
             
             col1, col2 = st.columns(2)
         
@@ -92,7 +93,6 @@ else:
                 
             with col2:
                 st.subheader("Top 10 Recommendations")
-                st.metric(label="Calculation Duration", value=f"{duration:.4f} seconds")
                 if recommendations.empty:
                     st.info("No recommendations were generated for this simulation (e.g., all ratings were neutral).")
                 else:
@@ -102,3 +102,16 @@ else:
                     rec_display.rename(columns={'Character-centric': 'Featured Character'}, inplace=True)
                     
                     st.dataframe(rec_display.set_index('Item #'), use_container_width=True)
+                    st.metric(label="Calculation Time", value=f"{duration:.4f} seconds")
+            with st.expander("User Profile"):
+                if user_profile:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("**Top 10 'Love' Tokens:**")
+                        st.dataframe(user_profile.get("loves", []), use_container_width=True)
+                    with col2:
+                        st.write("**Top 10 'Hate' Tokens:**")
+                        st.dataframe(user_profile.get("hates", []), use_container_width=True)
+                    st.write("_Lists may be shorter._")
+                else:
+                    st.write("No profile was generated.")

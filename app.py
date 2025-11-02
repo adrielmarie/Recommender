@@ -42,19 +42,19 @@ def load_all():
         df['Item #'] = df['Item #'].astype(str)
     except FileNotFoundError:
         st.error("Error: 'sanrio_products.csv' not found.")
-        return None, None, None, None, False
+        return None, None, None, None, None, False
     except Exception as e:
         st.error(f"Error loading data: {e}")
-        return None, None, None, None, False
+        return None, None, None, None, None, False
 
     has_image_url = 'Image URL' in df.columns
 
     if df is not None:
         df_processed = recommender.preprocess_data(df.copy())
-        tfidf_matrix, _, item_id_to_index = recommender.create_tfidf_matrix(df_processed)
-        return df, df_processed, item_id_to_index, tfidf_matrix, has_image_url
+        tfidf_matrix, tfidf_vectorizer, item_id_to_index = recommender.create_tfidf_matrix(df_processed)
+        return df, df_processed, item_id_to_index, tfidf_matrix, tfidf_vectorizer, has_image_url
     
-    return None, None, None, None, False
+    return None, None, None, None, None, False
 
 def get_image_url(item_row, has_image_url_column):
     if has_image_url_column and pd.notna(item_row['Image URL']):
@@ -132,8 +132,7 @@ def show_rating_screen(df, num_rated, has_image_url):
                     st.session_state.show_recs = True
                 
                 st.rerun()
-
-def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index, has_image_url):
+def show_recommendation_screen(df, df_processed, tfidf_matrix, tfidf_vectorizer, item_id_to_index, has_image_url):
     st.title("Your Recommendations!")
     num_rated = len(st.session_state.user_ratings)
     st.write(f"Based on your {num_rated} ratings, you might also like these:")
@@ -158,10 +157,11 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
     st.subheader("Top Recommended Items")
 
     with st.spinner("Finding recommendations..."):
-        recommendations, duration = recommender.get_recommendations(
+        recommendations, user_profile, duration = recommender.get_recommendations(
             st.session_state.user_ratings,
             df_processed,
             tfidf_matrix,
+            tfidf_vectorizer,
             item_id_to_index
         )
     
@@ -173,6 +173,7 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
 
         # Filter out for positive similarities
         rec_df_positive = rec_df[rec_df['Similarity'] > 0]
+        
 
         if rec_df_positive.empty:
             st.warning("No relevant recommendations found. Try adjusting your ratings or weights!")
@@ -203,6 +204,20 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
                 st.write(info)
 
     st.divider()
+    st.metric("Calculation Time", f"{duration:.4f} seconds")
+    with st.expander("User Profile"):
+            if user_profile:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Top 10 'Love' Tokens:**")
+                    st.dataframe(user_profile.get("loves", []), use_container_width=True)
+                with col2:
+                    st.write("**Top 10 'Hate' Tokens:**")
+                    st.dataframe(user_profile.get("hates", []), use_container_width=True)
+                st.write("_Lists may be shorter._")
+            else:
+                st.write("No profile was generated.")
+
     if st.button("Start Over & Rate Again", type="primary"):
         # Clear all session state to restart
         st.session_state.user_ratings = {}
@@ -211,7 +226,7 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
         st.rerun()
 
 # Load data
-df, df_processed, item_id_to_index, tfidf_matrix, has_image_url = load_all()
+df, df_processed, item_id_to_index, tfidf_matrix, tfidf_vectorizer, has_image_url = load_all()
 
 user_weights = show_weight_sliders()
 
@@ -228,7 +243,7 @@ if df is not None:
 
     # Show recommendations
     if num_rated >= 5 or st.session_state.show_recs:
-        show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index, has_image_url)
+        show_recommendation_screen(df, df_processed, tfidf_matrix, tfidf_vectorizer, item_id_to_index, has_image_url)
     
     # Show rating screen
     else:

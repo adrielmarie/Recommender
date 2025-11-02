@@ -96,13 +96,16 @@ def create_tfidf_matrix(df, weights=None):
 
     return tfidf_matrix, tfidf, item_id_to_index
 
-def get_recommendations(user_ratings, df, tfidf_matrix, item_id_to_index, top_n=10):
+def get_recommendations(user_ratings, df, tfidf_matrix, tfidf_vectorizer, item_id_to_index, top_n=10):
 
     # Start timer for getting recommendations
     start_time = time.time()
 
     # Create an empty user profile vector
     user_profile = np.zeros(tfidf_matrix.shape[1])
+
+    # Get the inverse vocabulary (index -> word)
+    idx_to_word = {i: w for w, i in tfidf_vectorizer.vocabulary_.items()}
 
     # Check if any valid ratings were provided
     valid_ratings_found = False
@@ -131,6 +134,15 @@ def get_recommendations(user_ratings, df, tfidf_matrix, item_id_to_index, top_n=
         duration = end_time - start_time
         print("No recommendations to generate. Please provide non-neutral ratings (1, 2, 4, or 5).")
         return pd.DataFrame(columns=['Item #', 'Title', 'Type', 'Character-centric' 'Similarity']), duration
+    
+    # Extract indices of top positive and negative scores
+    top_positive_indices = user_profile.argsort()[::-1][:10]
+    top_negative_indices = user_profile.argsort()[:10]
+
+    loves = [{"token": idx_to_word[i], "score": user_profile[i]} for i in top_positive_indices if user_profile[i] > 0]
+    hates = [{"token": idx_to_word[i], "score": user_profile[i]} for i in top_negative_indices if user_profile[i] < 0]
+    
+    profile_dict = {"loves": loves, "hates": hates}
 
     # Reshape profile to 2D array for cosine_similarity function
     user_profile_sparse = csr_matrix(user_profile)
@@ -160,7 +172,7 @@ def get_recommendations(user_ratings, df, tfidf_matrix, item_id_to_index, top_n=
     end_time = time.time()
     duration = end_time - start_time
 
-    return df_recommendations.head(top_n), duration
+    return df_recommendations.head(top_n), profile_dict, duration
 
 def generate_random_ratings(df, num_products):
     random_item_indices = random.sample(range(len(df)), num_products)

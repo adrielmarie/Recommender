@@ -163,6 +163,7 @@ def show_recommendation_screen(df, df_processed, tfidf_matrix, item_id_to_index,
         
     # Display LLM's analysis
     st.subheader("AI Analysis of Your Profile:")
+    st.metric("Calculation Time", f"{duration:.4f} seconds")
     with st.expander("Show/Hide JSON"):
         st.json(llm_profile)
 
