@@ -9,6 +9,41 @@ import rec_llm as llm_recommender
 
 from modules.nav import Navbar
 
+PRESET_PROFILES = {
+    "Select a Preset": None,
+    "Pompom Lover #51": {
+        'sku-43922088395000': 5,
+        'HKT0685': 5,
+        '905224': 4,
+        '295795': 1,
+        '182419': 3,
+        '907570': 5,
+        '492167': 5,
+        '862193': 5,
+        '891690': 2,
+        '104302': 1,
+        '927082': 1
+    },
+    "Chococat Lover #42": {
+        '862193': 5,
+        '862517': 5,
+        '905224': 5,
+        'HKT0685': 5,
+        '485713': 5,
+        '300586': 5,
+        '182419': 3,
+        '540439': 4,
+        '673846': 1,
+        '642142': 1,
+        '642908': 1,
+        '309214': 1,
+        '637050': 1,
+        '595861': 1,
+        '916030': 2,
+        '907332': 1,
+    }
+}
+
 # Load data
 @st.cache_resource
 def load_all_data():
@@ -78,6 +113,7 @@ def initialize_session_state():
         'llm_recs_cache': None,
         'llm_profile_cache': None,
         'llm_time_cache': 0.0,
+        'preset_selection': "Select a Preset",
     }
     for key, default_value in defaults.items():
         if key not in st.session_state:
@@ -87,7 +123,8 @@ def reset_session_state():
     keys_to_reset = [
         'user_ratings', 'show_results',
         'trad_recs_cache', 'trad_profile_cache', 'trad_time_cache',
-        'llm_recs_cache', 'llm_profile_cache', 'llm_time_cache'
+        'llm_recs_cache', 'llm_profile_cache', 'llm_time_cache',
+        'preset_selection',
     ]
     for key in keys_to_reset:
         if key in st.session_state:
@@ -95,7 +132,7 @@ def reset_session_state():
     # Re-initialize after deleting
     initialize_session_state()
 
-async def run_recommendations(api_key, full_df, trad_data, llm_data):
+async def run_recommendations(api_key, trad_data, llm_data):
     user_ratings = st.session_state.user_ratings
     
     # Unpack data
@@ -171,7 +208,26 @@ if data_load_result[0] is not None:
 
     if not st.session_state.show_results:
         # Input ratings
-        st.header("Add Product Ratings")
+        st.subheader("Load a Preset Profile")
+        
+        preset_name = st.selectbox(
+            "Choose a preset profile to load (clears manual ratings):",
+            options=PRESET_PROFILES.keys(),
+            key='preset_selection'
+        )
+
+        if st.button("Load Preset Profile", type="secondary"):
+            if preset_name != "Select a Preset":
+                # Clear existing ratings and load new ones
+                st.session_state.user_ratings = PRESET_PROFILES[preset_name].copy()
+                st.success(f"Loaded '{preset_name}'! ({len(st.session_state.user_ratings)} items added below)")
+            else:
+                st.info("Please select a preset from the dropdown first.")
+
+        st.divider()
+
+        st.subheader("Build Your Own")
+        st.subheader(f"Rated Items: ({len(st.session_state.user_ratings)} / 20)")
 
         # Form for adding a new rating
         with st.form(key="add_rating_form"):
@@ -199,8 +255,6 @@ if data_load_result[0] is not None:
                     st.session_state.user_ratings[item_id_input] = rating_input
                     st.success(f"Added '{item_id_input}' with rating {rating_input} stars.")
 
-        # Display current list of rated items
-        st.subheader(f"Your Rated Items: ({len(st.session_state.user_ratings)} / 20)")
         if not st.session_state.user_ratings:
             st.info("No items rated yet. Use the form above to add items.")
         else:
@@ -213,14 +267,21 @@ if data_load_result[0] is not None:
                     "Your Rating": rating
                 })
             
-            st.dataframe(pd.DataFrame(rated_items_list), width="stretch")
+            st.dataframe(pd.DataFrame(rated_items_list).set_index('Item #'), width="stretch")
             
             # Button to remove the last item
-            if st.button("Remove Last Item"):
-                if st.session_state.user_ratings:
-                    last_item_id = list(st.session_state.user_ratings.keys())[-1]
-                    del st.session_state.user_ratings[last_item_id]
-                    st.rerun()
+            col1, col2 = st.columns([1,1])
+            with col1: 
+                if st.button("Remove Last Item", width='stretch'):
+                    if st.session_state.user_ratings:
+                        last_item_id = list(st.session_state.user_ratings.keys())[-1]
+                        del st.session_state.user_ratings[last_item_id]
+                        st.rerun()
+            with col2:
+                if st.button("Clear All", width='stretch'):
+                    if st.session_state.user_ratings:
+                        st.session_state.user_ratings = {}
+                        st.rerun()
 
         # Button to trigger recommendations
         st.divider()
@@ -229,12 +290,22 @@ if data_load_result[0] is not None:
             st.rerun()
 
     else:
-        st.header("Results")
+        st.header("Your Rated Items")
+        rated_items_list = []
+        for item_id, rating in st.session_state.user_ratings.items():
+            item_details = df[df['Item #'] == item_id].iloc[0]
+            rated_items_list.append({
+                "Item #": item_id,
+                "Title": item_details['Title'],
+                "Your Rating": rating
+            })
+
+        st.dataframe(pd.DataFrame(rated_items_list).set_index('Item #'), width='stretch')
         
         # Run the async function to populate cache
         trad_data = (df_processed_trad, trad_models)
         llm_data = (df_processed_llm, llm_models)
-        asyncio.run(run_recommendations(api_key, df, trad_data, llm_data))
+        asyncio.run(run_recommendations(api_key, trad_data, llm_data))
 
         col1, col2 = st.columns(2)
         
