@@ -133,7 +133,7 @@ def get_recommendations(user_ratings, df, tfidf_matrix, tfidf_vectorizer, item_i
         end_time = time.time()
         duration = end_time - start_time
         print("No recommendations to generate. Please provide non-neutral ratings (1, 2, 4, or 5).")
-        return pd.DataFrame(columns=['Item #', 'Title', 'Type', 'Character-centric' 'Similarity']), duration
+        return pd.DataFrame(columns=['Item #', 'Title', 'Type', 'Character-centric' 'Similarity']), user_profile, duration
     
     # Extract indices of top positive and negative scores
     top_positive_indices = user_profile.argsort()[::-1][:10]
